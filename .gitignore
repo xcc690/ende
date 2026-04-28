@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+dist/
+build/
+*.spec.bak
+.runtime_*.json
+*.egg-info/
+.env
+venv/
+.claude/

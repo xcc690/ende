@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 import subprocess
 import shutil
 import urllib.parse
@@ -10,9 +11,17 @@ import requests
 
 class JSEngine:
     def __init__(self):
-        from core.path_utils import get_project_root
-        self._node_path = shutil.which("node") or "node"
+        from core.path_utils import get_project_root, get_work_dir
+        self._node_path = self._find_node()
         self._cli_path = os.path.join(get_project_root(), "js_engine", "cli.js")
+
+    def _find_node(self) -> str:
+        if getattr(sys, 'frozen', False):
+            from core.path_utils import get_project_root
+            bundled = os.path.join(get_project_root(), "node.exe")
+            if os.path.exists(bundled):
+                return bundled
+        return shutil.which("node") or "node"
 
     def call(self, action: str, algorithm: str, data: str, params: dict) -> str:
         payload = json.dumps({

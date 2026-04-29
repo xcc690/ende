@@ -1,6 +1,7 @@
 """网关进程管理器 - 支持动态多网关"""
 
 import os
+import sys
 import shutil
 from PyQt5.QtCore import QObject, pyqtSignal, QProcess, QProcessEnvironment
 
@@ -13,14 +14,23 @@ class GatewayManager(QObject):
         super().__init__()
         self.config = config_center
         self._processes = {}
-        from core.path_utils import get_project_root
+        from core.path_utils import get_project_root, get_work_dir
         self._project_root = get_project_root()
+        self._work_dir = get_work_dir()
 
     def _find_mitmdump(self) -> str:
+        if getattr(sys, 'frozen', False):
+            exe_dir = os.path.dirname(sys.executable)
+            for candidate in [
+                os.path.join(exe_dir, "mitmdump.exe"),
+                os.path.join(exe_dir, "mitmdump", "mitmdump.exe"),
+            ]:
+                if os.path.exists(candidate):
+                    return candidate
         return shutil.which("mitmdump") or "mitmdump"
 
     def _config_path(self, gw_name: str) -> str:
-        return os.path.join(self._project_root, f".runtime_{gw_name}.json")
+        return os.path.join(self._work_dir, f".runtime_{gw_name}.json")
 
     def start_gateway(self, gw_name: str) -> bool:
         if gw_name in self._processes:

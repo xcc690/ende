@@ -4,7 +4,8 @@ import sys
 import os
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt, QCoreApplication, qInstallMessageHandler, QtInfoMsg, QtWarningMsg
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QIcon, QPalette, QColor
+from core.path_utils import get_project_root
 
 
 def _qt_message_filter(msg_type, context, message):
@@ -22,6 +23,32 @@ def main():
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+
+    palette = QPalette()
+    palette.setColor(QPalette.Window, QColor("#1e1e2e"))
+    palette.setColor(QPalette.WindowText, QColor("#cdd6f4"))
+    palette.setColor(QPalette.Base, QColor("#313244"))
+    palette.setColor(QPalette.AlternateBase, QColor("#45475a"))
+    palette.setColor(QPalette.Text, QColor("#cdd6f4"))
+    palette.setColor(QPalette.Button, QColor("#45475a"))
+    palette.setColor(QPalette.ButtonText, QColor("#cdd6f4"))
+    palette.setColor(QPalette.BrightText, QColor("#f38ba8"))
+    palette.setColor(QPalette.Highlight, QColor("#89b4fa"))
+    palette.setColor(QPalette.HighlightedText, QColor("#1e1e2e"))
+    palette.setColor(QPalette.ToolTipBase, QColor("#313244"))
+    palette.setColor(QPalette.ToolTipText, QColor("#cdd6f4"))
+    palette.setColor(QPalette.Link, QColor("#89b4fa"))
+    palette.setColor(QPalette.Disabled, QPalette.WindowText, QColor("#585b70"))
+    palette.setColor(QPalette.Disabled, QPalette.Text, QColor("#585b70"))
+    palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor("#585b70"))
+    app.setPalette(palette)
+
+    icon_path = os.path.join(get_project_root(), "app_icon.ico")
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
+
+    from gui.theme import DARK_THEME
+    app.setStyleSheet(DARK_THEME)
 
     screen = app.primaryScreen()
     dpi = screen.logicalDotsPerInch()

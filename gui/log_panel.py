@@ -34,8 +34,8 @@ class LogPanel(QWidget):
         self.log_text.setReadOnly(True)
         self.log_text.setMaximumBlockCount(MAX_LINES)
         self.log_text.setStyleSheet(
-            "QPlainTextEdit { background-color: #1e1e1e; color: #d4d4d4; "
-            "font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI'; font-size: 9pt; }"
+            "QPlainTextEdit { background-color: #11111b; color: #a6adc8; "
+            "font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI'; }"
         )
         layout.addWidget(self.log_text)
 

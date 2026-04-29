@@ -4,10 +4,11 @@ import os
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox,
     QComboBox, QLineEdit, QTextEdit, QLabel, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QStackedWidget, QScrollArea, QSplitter
+    QStackedWidget, QScrollArea
 )
 from PyQt5.QtCore import Qt, QProcess, pyqtSignal
+from gui.match_dialog import MatchRulesDialog
+from gui.network_dialog import NetworkDialog
 
 
 ALGORITHMS = ["AES", "DES", "3DES", "RC4", "RSA", "SM2", "SM3", "SM4", "Hash", "HMAC", "Base64"]
@@ -82,26 +83,6 @@ VISIBILITY_RULES = {
     "RSA": {"public": {"private_key": False}, "private": {"public_key": False}},
 }
 
-TARGETS = [
-    ("request_header", "请求头"),
-    ("request_body", "请求体"),
-    ("response_body", "响应体"),
-]
-MATCH_MODES = [
-    ("all", "全部匹配"),
-    ("contains", "包含"),
-    ("equals", "等于"),
-    ("regex", "正则匹配"),
-    ("startswith", "前缀匹配"),
-]
-ACTIONS = [("encrypt", "加密"), ("decrypt", "解密")]
-WRAPPERS = [
-    ("none", "无"),
-    ("double_quote", '双引号 "..."'),
-    ("single_quote", "单引号 '...'"),
-    ("custom", "自定义"),
-]
-
 
 class GatewayTab(QWidget):
     log_signal = pyqtSignal(str)
@@ -126,9 +107,14 @@ class GatewayTab(QWidget):
         layout.setSpacing(8)
 
         layout.addWidget(self._build_control_bar())
-        layout.addWidget(self._build_network_group())
-        layout.addWidget(self._build_crypto_group())
-        layout.addWidget(self._build_match_group())
+
+        self.network_bar = self._build_network_bar()
+        layout.addWidget(self.network_bar)
+        self.crypto_group = self._build_crypto_group()
+        layout.addWidget(self.crypto_group)
+
+        self.match_bar = self._build_match_bar()
+        layout.addWidget(self.match_bar)
         layout.addWidget(self._build_test_group())
         layout.addStretch()
 
@@ -143,13 +129,23 @@ class GatewayTab(QWidget):
         layout = QHBoxLayout(w)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.btn_start = QPushButton("启动")
-        self.btn_stop = QPushButton("停止")
+        self.btn_start = QPushButton("  启动  ")
+        self.btn_start.setStyleSheet(
+            "QPushButton { background-color: #a6e3a1; color: #1e1e2e; font-weight: bold; }"
+            "QPushButton:hover { background-color: #94e2d5; }"
+            "QPushButton:disabled { background-color: #313244; color: #585b70; }")
+        self.btn_stop = QPushButton("  停止  ")
+        self.btn_stop.setStyleSheet(
+            "QPushButton { background-color: #f38ba8; color: #1e1e2e; font-weight: bold; }"
+            "QPushButton:hover { background-color: #eba0ac; }"
+            "QPushButton:disabled { background-color: #313244; color: #585b70; }")
         self.btn_stop.setEnabled(False)
-        self.lbl_status = QLabel("● 已停止")
-        self.lbl_status.setStyleSheet("color: gray;")
+        self.lbl_status = QLabel("  ● 已停止")
+        self.lbl_status.setStyleSheet("color: #6c7086; font-weight: bold;")
         btn_remove = QPushButton("删除此网关")
-        btn_remove.setStyleSheet("color: red;")
+        btn_remove.setStyleSheet(
+            "QPushButton { background-color: transparent; color: #f38ba8; border: 1px solid #f38ba8; }"
+            "QPushButton:hover { background-color: #f38ba8; color: #1e1e2e; }")
 
         self.btn_start.clicked.connect(self._start)
         self.btn_stop.clicked.connect(self._stop)
@@ -171,43 +167,62 @@ class GatewayTab(QWidget):
     def on_status_changed(self, running: bool):
         self.btn_start.setEnabled(not running)
         self.btn_stop.setEnabled(running)
-        self.lbl_status.setText("● 运行中" if running else "● 已停止")
-        self.lbl_status.setStyleSheet("color: green;" if running else "color: gray;")
+        if running:
+            self.lbl_status.setText("  ● 运行中")
+            self.lbl_status.setStyleSheet("color: #a6e3a1; font-weight: bold;")
+        else:
+            self.lbl_status.setText("  ● 已停止")
+            self.lbl_status.setStyleSheet("color: #6c7086; font-weight: bold;")
+        self._set_config_locked(running)
+
+    def _set_config_locked(self, locked: bool):
+        self.network_bar.setEnabled(not locked)
+        self.crypto_group.setEnabled(not locked)
+        self.match_bar.setEnabled(not locked)
 
     # ── 网络配置 ──
-    def _build_network_group(self) -> QGroupBox:
-        group = QGroupBox("网络配置")
-        form = QFormLayout(group)
+    def _build_network_bar(self) -> QWidget:
+        w = QWidget()
+        layout = QHBoxLayout(w)
+        layout.setContentsMargins(0, 0, 0, 0)
 
+        self.btn_network = QPushButton("  网络配置  ")
+        self.btn_network.setStyleSheet(
+            "QPushButton { background-color: #45475a; color: #cdd6f4; font-weight: bold; "
+            "border: 1px solid #585b70; border-radius: 4px; padding: 8px 20px; }"
+            "QPushButton:hover { background-color: #585b70; }"
+            "QPushButton:disabled { background-color: #313244; color: #585b70; }")
+        self.btn_network.clicked.connect(self._open_network_dialog)
+
+        self.lbl_network_summary = QLabel("")
+        self.lbl_network_summary.setStyleSheet("color: #a6adc8;")
+
+        layout.addWidget(self.btn_network)
+        layout.addWidget(self.lbl_network_summary)
+        layout.addStretch()
+        return w
+
+    def _open_network_dialog(self):
         gw = self.config.get_gateway(self.gw_name)
+        dlg = NetworkDialog(gw, self)
+        if dlg.exec_() == NetworkDialog.Accepted:
+            result = dlg.get_config()
+            self.config.set_gateway_value(self.gw_name, "type", result["type"])
+            self.config.set_gateway_value(self.gw_name, "network.listen_port", result["network"]["listen_port"])
+            self.config.set_gateway_value(self.gw_name, "network.upstream_proxy", result["network"]["upstream_proxy"])
+            self._update_network_summary()
+            self._hot_reload_config()
 
-        self.cb_type = QComboBox()
-        self.cb_type.addItem("解密", "decrypt")
-        self.cb_type.addItem("加密", "encrypt")
-        self.cb_type.addItem("加解密", "both")
-        form.addRow("网关类型:", self.cb_type)
-
-        self.input_port = QLineEdit()
-        self.input_port.setPlaceholderText("8080")
-        form.addRow("监听端口:", self.input_port)
-
-        self.input_upstream = QLineEdit()
-        self.input_upstream.setPlaceholderText("http://127.0.0.1:8082")
-        form.addRow("上游代理:", self.input_upstream)
-
-        self.cb_type.currentIndexChanged.connect(self._save_network)
-        self.input_port.textChanged.connect(self._save_network)
-        self.input_upstream.textChanged.connect(self._save_network)
-        return group
-
-    def _save_network(self):
-        self.config.set_gateway_value(self.gw_name, "type", self.cb_type.currentData())
-        try:
-            port = int(self.input_port.text())
-        except ValueError:
-            port = 0
-        self.config.set_gateway_value(self.gw_name, "network.listen_port", port)
-        self.config.set_gateway_value(self.gw_name, "network.upstream_proxy", self.input_upstream.text())
+    def _update_network_summary(self):
+        gw = self.config.get_gateway(self.gw_name)
+        type_map = {"decrypt": "解密", "encrypt": "加密", "both": "加解密"}
+        gw_type = type_map.get(gw.get("type", "decrypt"), gw.get("type"))
+        port = gw["network"]["listen_port"]
+        upstream = gw["network"].get("upstream_proxy", "")
+        parts = [f"类型: {gw_type}", f"端口: {port}"]
+        if upstream:
+            parts.append(f"上游: {upstream}")
+        self.lbl_network_summary.setText("    ".join(parts))
 
     # ── 算法配置 ──
     def _build_crypto_group(self) -> QGroupBox:
@@ -354,7 +369,7 @@ class GatewayTab(QWidget):
         self.btn_jsrpc_toggle = QPushButton("启动 JSRPC 服务")
         self.btn_jsrpc_toggle.clicked.connect(self._toggle_jsrpc)
         self.jsrpc_status_label = QLabel("")
-        self.jsrpc_status_label.setStyleSheet("color: #666; font-size: 9pt;")
+        self.jsrpc_status_label.setStyleSheet("color: #6c7086;")
         btn_layout.addWidget(self.btn_jsrpc_toggle)
         btn_layout.addWidget(self.jsrpc_status_label)
         btn_layout.addStretch()
@@ -383,15 +398,16 @@ class GatewayTab(QWidget):
             self._jsrpc_process = None
             self.btn_jsrpc_toggle.setText("启动 JSRPC 服务")
             self.jsrpc_status_label.setText("已停止")
-            self.jsrpc_status_label.setStyleSheet("color: #666; font-size: 9pt;")
+            self.jsrpc_status_label.setStyleSheet("color: #6c7086;")
             self.log_signal.emit("[JSRPC] 服务已停止")
             return
 
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        from core.path_utils import get_project_root
+        project_root = get_project_root()
         exe_path = os.path.join(project_root, "jsrpc.exe")
         if not os.path.exists(exe_path):
             self.jsrpc_status_label.setText("jsrpc.exe 不存在")
-            self.jsrpc_status_label.setStyleSheet("color: red; font-size: 9pt;")
+            self.jsrpc_status_label.setStyleSheet("color: #f38ba8;")
             self.log_signal.emit(f"[JSRPC] 文件不存在: {exe_path}")
             return
 
@@ -408,12 +424,12 @@ class GatewayTab(QWidget):
         if self._jsrpc_process.waitForStarted(3000):
             self.btn_jsrpc_toggle.setText("停止 JSRPC 服务")
             self.jsrpc_status_label.setText("运行中")
-            self.jsrpc_status_label.setStyleSheet("color: green; font-size: 9pt;")
+            self.jsrpc_status_label.setStyleSheet("color: #a6e3a1;")
             self.log_signal.emit("[JSRPC] 服务已启动")
         else:
             err = self._jsrpc_process.errorString()
             self.jsrpc_status_label.setText("启动失败")
-            self.jsrpc_status_label.setStyleSheet("color: red; font-size: 9pt;")
+            self.jsrpc_status_label.setStyleSheet("color: #f38ba8;")
             self.log_signal.emit(f"[JSRPC] 启动失败: {err}")
             self._jsrpc_process = None
 
@@ -439,183 +455,46 @@ class GatewayTab(QWidget):
         self._jsrpc_process = None
         self.btn_jsrpc_toggle.setText("启动 JSRPC 服务")
         self.jsrpc_status_label.setText("已停止")
-        self.jsrpc_status_label.setStyleSheet("color: #666; font-size: 9pt;")
+        self.jsrpc_status_label.setStyleSheet("color: #6c7086;")
 
     # ── 匹配规则 ──
-    def _build_match_group(self) -> QGroupBox:
-        group = QGroupBox("数据匹配规则")
-        layout = QVBoxLayout(group)
+    def _build_match_bar(self) -> QWidget:
+        w = QWidget()
+        layout = QHBoxLayout(w)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        add_form = QFormLayout()
-        self.cb_target = QComboBox()
-        for val, label in TARGETS:
-            self.cb_target.addItem(label, val)
-        add_form.addRow("匹配位置:", self.cb_target)
-        self.cb_target.currentIndexChanged.connect(self._on_target_changed)
+        self.btn_match_rules = QPushButton("  配置匹配规则 (0 条)  ")
+        self.btn_match_rules.setStyleSheet(
+            "QPushButton { background-color: #45475a; color: #cdd6f4; font-weight: bold; "
+            "border: 1px solid #585b70; border-radius: 4px; padding: 8px 20px; }"
+            "QPushButton:hover { background-color: #585b70; }"
+            "QPushButton:disabled { background-color: #313244; color: #585b70; }")
+        self.btn_match_rules.clicked.connect(self._open_match_dialog)
+        layout.addWidget(self.btn_match_rules)
+        layout.addStretch()
+        return w
 
-        self.input_header_name = QLineEdit()
-        self.input_header_name.setPlaceholderText("如 Content-Type")
-        self.lbl_header_name = QLabel("Header 名称:")
-        add_form.addRow(self.lbl_header_name, self.input_header_name)
+    def _open_match_dialog(self):
+        gw = self.config.get_gateway(self.gw_name)
+        rules = gw.get("match_rules", [])
+        gw_type = gw.get("type", "both")
+        dlg = MatchRulesDialog(rules, gw_type, self)
+        if dlg.exec_() == MatchRulesDialog.Accepted:
+            new_rules = dlg.get_rules()
+            self.config.set_gateway_value(self.gw_name, "match_rules", new_rules)
+            self._update_match_count()
+            self._hot_reload_config()
 
-        self.cb_match_mode = QComboBox()
-        for val, label in MATCH_MODES:
-            self.cb_match_mode.addItem(label, val)
-        add_form.addRow("匹配方式:", self.cb_match_mode)
-        self.cb_match_mode.currentIndexChanged.connect(self._on_match_mode_changed)
+    def _update_match_count(self):
+        gw = self.config.get_gateway(self.gw_name)
+        count = len(gw.get("match_rules", []))
+        self.btn_match_rules.setText(f"  配置匹配规则 ({count} 条)  ")
 
-        self.input_keyword = QLineEdit()
-        self.input_keyword.setPlaceholderText("匹配关键字或正则表达式")
-        self.lbl_keyword = QLabel("关键字:")
-        add_form.addRow(self.lbl_keyword, self.input_keyword)
-
-        self.cb_action = QComboBox()
-        for val, label in ACTIONS:
-            self.cb_action.addItem(label, val)
-        add_form.addRow("执行操作:", self.cb_action)
-
-        self.cb_wrapper = QComboBox()
-        for val, label in WRAPPERS:
-            self.cb_wrapper.addItem(label, val)
-        add_form.addRow("包裹符:", self.cb_wrapper)
-        self.cb_wrapper.currentIndexChanged.connect(self._on_wrapper_changed)
-
-        self.input_wrapper_prefix = QLineEdit()
-        self.lbl_wrapper_prefix = QLabel("自定义前缀:")
-        add_form.addRow(self.lbl_wrapper_prefix, self.input_wrapper_prefix)
-        self.input_wrapper_suffix = QLineEdit()
-        self.lbl_wrapper_suffix = QLabel("自定义后缀:")
-        add_form.addRow(self.lbl_wrapper_suffix, self.input_wrapper_suffix)
-
-        btn_add = QPushButton("添加规则")
-        btn_add.clicked.connect(self._add_rule)
-        add_form.addRow("", btn_add)
-        layout.addLayout(add_form)
-
-        self._on_target_changed()
-        self._on_wrapper_changed()
-        self._on_match_mode_changed()
-
-        self.rule_table = QTableWidget(0, 6)
-        self.rule_table.setHorizontalHeaderLabels(
-            ["匹配位置", "Header", "匹配方式", "关键字", "操作", "包裹符"])
-        self.rule_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.rule_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.rule_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.rule_table.setMaximumHeight(150)
-        layout.addWidget(self.rule_table)
-
-        tbl_btn = QHBoxLayout()
-        btn_rm = QPushButton("删除选中")
-        btn_rm.clicked.connect(self._remove_rule)
-        btn_clr = QPushButton("清空全部")
-        btn_clr.clicked.connect(self._clear_rules)
-        tbl_btn.addStretch()
-        tbl_btn.addWidget(btn_rm)
-        tbl_btn.addWidget(btn_clr)
-        layout.addLayout(tbl_btn)
-        return group
-
-    def _on_target_changed(self):
-        is_header = self.cb_target.currentData() == "request_header"
-        self.input_header_name.setVisible(is_header)
-        self.lbl_header_name.setVisible(is_header)
-
-    def _on_match_mode_changed(self):
-        is_all = self.cb_match_mode.currentData() == "all"
-        self.input_keyword.setVisible(not is_all)
-        self.lbl_keyword.setVisible(not is_all)
-
-    def _on_wrapper_changed(self):
-        is_custom = self.cb_wrapper.currentData() == "custom"
-        self.input_wrapper_prefix.setVisible(is_custom)
-        self.lbl_wrapper_prefix.setVisible(is_custom)
-        self.input_wrapper_suffix.setVisible(is_custom)
-        self.lbl_wrapper_suffix.setVisible(is_custom)
-
-    def _get_wrapper_config(self) -> dict:
-        wtype = self.cb_wrapper.currentData()
-        if wtype == "double_quote":
-            return {"prefix": '"', "suffix": '"'}
-        elif wtype == "single_quote":
-            return {"prefix": "'", "suffix": "'"}
-        elif wtype == "custom":
-            return {
-                "prefix": self.input_wrapper_prefix.text(),
-                "suffix": self.input_wrapper_suffix.text(),
-            }
-        return {"prefix": "", "suffix": ""}
-
-    def _add_rule(self):
-        target = self.cb_target.currentData()
-        match_mode = self.cb_match_mode.currentData()
-        keyword = self.input_keyword.text().strip()
-        header_name = self.input_header_name.text().strip()
-        if match_mode != "all" and not keyword:
-            return
-        if target == "request_header" and not header_name:
-            return
-        wrapper = self._get_wrapper_config()
-        rule = {
-            "target": target,
-            "header_name": header_name if target == "request_header" else "",
-            "match_mode": match_mode,
-            "keyword": keyword,
-            "action": self.cb_action.currentData(),
-            "wrapper_prefix": wrapper["prefix"],
-            "wrapper_suffix": wrapper["suffix"],
-        }
-        self._append_table_row(rule)
-        self._save_rules()
-        self.input_keyword.clear()
-        self.input_header_name.clear()
-
-    def _append_table_row(self, rule: dict):
-        row = self.rule_table.rowCount()
-        self.rule_table.insertRow(row)
-        t_item = QTableWidgetItem(dict(TARGETS).get(rule["target"], rule["target"]))
-        t_item.setData(Qt.UserRole, rule["target"])
-        self.rule_table.setItem(row, 0, t_item)
-        self.rule_table.setItem(row, 1, QTableWidgetItem(rule.get("header_name", "")))
-        m_item = QTableWidgetItem(dict(MATCH_MODES).get(rule["match_mode"], rule["match_mode"]))
-        m_item.setData(Qt.UserRole, rule["match_mode"])
-        self.rule_table.setItem(row, 2, m_item)
-        self.rule_table.setItem(row, 3, QTableWidgetItem(rule["keyword"]))
-        a_item = QTableWidgetItem(dict(ACTIONS).get(rule["action"], rule["action"]))
-        a_item.setData(Qt.UserRole, rule["action"])
-        self.rule_table.setItem(row, 4, a_item)
-        p = rule.get("wrapper_prefix", "")
-        s = rule.get("wrapper_suffix", "")
-        disp = "无" if not p and not s else f"{p}...{s}"
-        w_item = QTableWidgetItem(disp)
-        w_item.setData(Qt.UserRole, f"{p}|{s}")
-        self.rule_table.setItem(row, 5, w_item)
-
-    def _remove_rule(self):
-        rows = sorted(set(idx.row() for idx in self.rule_table.selectedIndexes()), reverse=True)
-        for row in rows:
-            self.rule_table.removeRow(row)
-        self._save_rules()
-
-    def _clear_rules(self):
-        self.rule_table.setRowCount(0)
-        self._save_rules()
-
-    def _save_rules(self):
-        rules = []
-        for row in range(self.rule_table.rowCount()):
-            wrapper_data = self.rule_table.item(row, 5).data(Qt.UserRole) or "|"
-            parts = wrapper_data.split("|", 1)
-            rules.append({
-                "target": self.rule_table.item(row, 0).data(Qt.UserRole),
-                "header_name": self.rule_table.item(row, 1).text(),
-                "match_mode": self.rule_table.item(row, 2).data(Qt.UserRole),
-                "keyword": self.rule_table.item(row, 3).text(),
-                "action": self.rule_table.item(row, 4).data(Qt.UserRole),
-                "wrapper_prefix": parts[0] if len(parts) > 0 else "",
-                "wrapper_suffix": parts[1] if len(parts) > 1 else "",
-            })
-        self.config.set_gateway_value(self.gw_name, "match_rules", rules)
+    def _hot_reload_config(self):
+        if self.gateway_mgr.is_running(self.gw_name):
+            self.gateway_mgr.stop_gateway(self.gw_name)
+            self.gateway_mgr.start_gateway(self.gw_name)
+            self.log_signal.emit(f"[{self.gw_name}] 配置已更新，网关已自动重启")
 
     # ── 测试加解密 ──
     def _build_test_group(self) -> QGroupBox:
@@ -646,7 +525,7 @@ class GatewayTab(QWidget):
         layout.addWidget(self.test_output)
 
         self.test_status = QLabel("")
-        self.test_status.setStyleSheet("color: #666; font-size: 8pt;")
+        self.test_status.setStyleSheet("color: #6c7086;")
         layout.addWidget(self.test_status)
         return group
 
@@ -679,11 +558,11 @@ class GatewayTab(QWidget):
                     text, cfg.get("params", {}))
             self.test_output.setPlainText(result)
             self.test_status.setText("加密成功")
-            self.test_status.setStyleSheet("color: green; font-size: 8pt;")
+            self.test_status.setStyleSheet("color: #a6e3a1;")
         except Exception as e:
             self.test_output.setPlainText("")
             self.test_status.setText(f"加密失败: {e}")
-            self.test_status.setStyleSheet("color: red; font-size: 8pt;")
+            self.test_status.setStyleSheet("color: #f38ba8;")
 
     def _test_decrypt(self):
         text = self.test_input.toPlainText()
@@ -701,11 +580,11 @@ class GatewayTab(QWidget):
                     text, cfg.get("params", {}))
             self.test_output.setPlainText(result)
             self.test_status.setText("解密成功")
-            self.test_status.setStyleSheet("color: green; font-size: 8pt;")
+            self.test_status.setStyleSheet("color: #a6e3a1;")
         except Exception as e:
             self.test_output.setPlainText("")
             self.test_status.setText(f"解密失败: {e}")
-            self.test_status.setStyleSheet("color: red; font-size: 8pt;")
+            self.test_status.setStyleSheet("color: #f38ba8;")
 
     def _test_swap(self):
         i = self.test_input.toPlainText()
@@ -717,11 +596,7 @@ class GatewayTab(QWidget):
     def _load_config(self):
         gw = self.config.get_gateway(self.gw_name)
 
-        idx = self.cb_type.findData(gw.get("type", "decrypt"))
-        if idx >= 0:
-            self.cb_type.setCurrentIndex(idx)
-        self.input_port.setText(str(gw["network"]["listen_port"]))
-        self.input_upstream.setText(gw["network"].get("upstream_proxy", ""))
+        self._update_network_summary()
 
         crypto = gw.get("crypto", {})
         if crypto.get("engine") == "jsrpc":
@@ -756,8 +631,7 @@ class GatewayTab(QWidget):
         self.jsrpc_decrypt_func.setText(jsrpc.get("decrypt_func", "decrypt"))
         self.jsrpc_timeout.setText(str(jsrpc.get("timeout", 5)))
 
-        for rule in gw.get("match_rules", []):
-            self._append_table_row(rule)
+        self._update_match_count()
 
     def cleanup(self):
         if self._jsrpc_process and self._jsrpc_process.state() == QProcess.Running:

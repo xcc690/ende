@@ -16,7 +16,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("加解密链式代理工具")
-        self.setMinimumSize(900, 700)
+        self.setMinimumSize(960, 720)
 
         self.config = ConfigCenter.instance()
         self.gateway_mgr = GatewayManager(self.config)
@@ -46,13 +46,15 @@ class MainWindow(QMainWindow):
         btn_load = QToolButton()
         btn_load.setText("加载配置")
         btn_load.setToolTip("从 .runtime_xx.json 加载网关配置")
-        btn_load.setStyleSheet("QToolButton { padding: 2px 6px; }")
         btn_load.clicked.connect(self._load_config_file)
 
         btn_add = QToolButton()
-        btn_add.setText("+")
+        btn_add.setText(" + 添加网关 ")
         btn_add.setToolTip("添加网关")
-        btn_add.setStyleSheet("QToolButton { font-size: 14pt; font-weight: bold; padding: 2px 8px; }")
+        btn_add.setStyleSheet(
+            "QToolButton { background-color: #89b4fa; color: #1e1e2e; font-weight: bold; "
+            "border-radius: 4px; padding: 4px 12px; }"
+            "QToolButton:hover { background-color: #74c7ec; }")
         btn_add.clicked.connect(self._add_gateway_dialog)
 
         corner_layout.addWidget(btn_load)

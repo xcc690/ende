@@ -183,3 +183,9 @@ class GatewayCryptoService:
             return rpc.call(group, action, ciphertext)
 
         return self._js_engine.call("decrypt", algorithm, ciphertext, params)
+
+    def encrypt_with(self, algorithm: str, plaintext: str, params: dict) -> str:
+        return self._js_engine.call("encrypt", algorithm, plaintext, params)
+
+    def decrypt_with(self, algorithm: str, ciphertext: str, params: dict) -> str:
+        return self._js_engine.call("decrypt", algorithm, ciphertext, params)

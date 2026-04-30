@@ -288,12 +288,20 @@ function sm2_encrypt(plaintext, params) {
     var publicKey = convertKeyToHex(params.public_key, params.key_encoding);
     var cipherMode = parseInt(params.cipher_mode) || 1;
     var encrypted = sm.sm2.doEncrypt(plaintext, publicKey, cipherMode);
+    if (params.prefix_04 === 'true' || params.prefix_04 === true) {
+        encrypted = '04' + encrypted;
+    }
     return encrypted;
 }
 
 function sm2_decrypt(ciphertext, params) {
     var privateKey = convertKeyToHex(params.private_key, params.key_encoding);
     var cipherMode = parseInt(params.cipher_mode) || 1;
+    if (params.prefix_04 === 'true' || params.prefix_04 === true) {
+        if (ciphertext.startsWith('04')) {
+            ciphertext = ciphertext.substring(2);
+        }
+    }
     var decrypted = sm.sm2.doDecrypt(ciphertext, privateKey, cipherMode);
     return decrypted;
 }

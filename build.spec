@@ -45,6 +45,7 @@ main_a = Analysis(
         'gui.log_panel',
         'gui.match_dialog',
         'gui.network_dialog',
+        'gui.algo_params',
         'gui.theme',
         'core.config_center',
         'core.gateway_manager',

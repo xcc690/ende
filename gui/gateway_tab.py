@@ -9,72 +9,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QProcess, pyqtSignal
 from gui.match_dialog import MatchRulesDialog
 from gui.network_dialog import NetworkDialog
+from gui.algo_params import ALGORITHMS, ALGO_PARAMS
 
-
-ALGORITHMS = ["AES", "DES", "3DES", "RC4", "RSA", "SM2", "SM3", "SM4", "Hash", "HMAC", "Base64"]
-
-ALGO_PARAMS = {
-    "AES": [
-        ("key", "密钥", "line", ""),
-        ("iv", "IV", "line", ""),
-        ("mode", "模式", "combo", ["CBC", "ECB", "CFB", "OFB", "CTR"]),
-        ("padding", "填充", "combo", ["PKCS7", "ZeroPadding", "NoPadding"]),
-        ("output_encoding", "输出编码", "combo", ["base64", "hex"]),
-        ("key_encoding", "密钥编码", "combo", ["utf-8", "hex", "base64"]),
-    ],
-    "DES": [
-        ("key", "密钥", "line", ""),
-        ("iv", "IV", "line", ""),
-        ("mode", "模式", "combo", ["CBC", "ECB"]),
-        ("padding", "填充", "combo", ["PKCS7", "ZeroPadding", "NoPadding"]),
-        ("output_encoding", "输出编码", "combo", ["base64", "hex"]),
-        ("key_encoding", "密钥编码", "combo", ["utf-8", "hex", "base64"]),
-    ],
-    "3DES": [
-        ("key", "密钥", "line", ""),
-        ("iv", "IV", "line", ""),
-        ("mode", "模式", "combo", ["CBC", "ECB"]),
-        ("padding", "填充", "combo", ["PKCS7", "ZeroPadding", "NoPadding"]),
-        ("output_encoding", "输出编码", "combo", ["base64", "hex"]),
-        ("key_encoding", "密钥编码", "combo", ["utf-8", "hex", "base64"]),
-    ],
-    "RC4": [
-        ("key", "密钥", "line", ""),
-        ("output_encoding", "输出编码", "combo", ["base64", "hex"]),
-        ("key_encoding", "密钥编码", "combo", ["utf-8", "hex", "base64"]),
-    ],
-    "RSA": [
-        ("key_encoding", "密钥编码", "combo", ["pem", "base64", "hex"]),
-        ("encrypt_with", "加密方式", "combo", ["public", "private"]),
-        ("public_key", "Public Key", "text", ""),
-        ("private_key", "Private Key", "text", ""),
-        ("padding", "Padding", "combo", ["OAEP", "PKCS1_v1_5"]),
-        ("output_encoding", "输出编码", "combo", ["base64", "hex"]),
-    ],
-    "SM2": [
-        ("key_encoding", "密钥编码", "combo", ["hex", "base64"]),
-        ("public_key", "Public Key", "text", ""),
-        ("private_key", "Private Key", "text", ""),
-        ("cipher_mode", "密文格式", "combo", ["1", "0"]),
-    ],
-    "SM3": [],
-    "SM4": [
-        ("key", "密钥 (Hex)", "line", ""),
-        ("iv", "IV (Hex)", "line", ""),
-        ("mode", "模式", "combo", ["cbc", "ecb"]),
-        ("output_encoding", "输出编码", "combo", ["hex", "base64"]),
-    ],
-    "Hash": [
-        ("hash_algorithm", "哈希算法", "combo", ["md5", "sha1", "sha256", "sha512"]),
-        ("output_encoding", "输出编码", "combo", ["hex", "base64"]),
-    ],
-    "HMAC": [
-        ("key", "密钥", "line", ""),
-        ("hash_algorithm", "哈希算法", "combo", ["md5", "sha1", "sha256", "sha512"]),
-        ("output_encoding", "输出编码", "combo", ["hex", "base64"]),
-    ],
-    "Base64": [],
-}
 
 VISIBILITY_RULES = {
     "AES": {"ECB": {"iv": False}},
@@ -501,6 +437,16 @@ class GatewayTab(QWidget):
         group = QGroupBox("测试加解密")
         layout = QVBoxLayout(group)
 
+        rule_layout = QHBoxLayout()
+        rule_layout.addWidget(QLabel("使用规则:"))
+        self.cb_test_rule = QComboBox()
+        self.cb_test_rule.addItem("全局算法配置", "global")
+        rule_layout.addWidget(self.cb_test_rule, 1)
+        btn_refresh = QPushButton("刷新")
+        btn_refresh.clicked.connect(self._refresh_test_rules)
+        rule_layout.addWidget(btn_refresh)
+        layout.addLayout(rule_layout)
+
         self.test_input = QTextEdit()
         self.test_input.setPlaceholderText("输入明文或密文...")
         self.test_input.setMaximumHeight(80)
@@ -529,11 +475,34 @@ class GatewayTab(QWidget):
         layout.addWidget(self.test_status)
         return group
 
+    def _refresh_test_rules(self):
+        self.cb_test_rule.clear()
+        self.cb_test_rule.addItem("全局算法配置", "global")
+        gw = self.config.get_gateway(self.gw_name)
+        rules = gw.get("match_rules", [])
+        from gui.match_dialog import TARGET_MAP
+        for i, rule in enumerate(rules):
+            target_label = TARGET_MAP.get(rule.get("target", ""), rule.get("target", ""))
+            algo = rule.get("algorithm", "") or rule.get("data_algorithm", "")
+            action_label = "加密" if rule.get("action") == "encrypt" else "解密"
+            label = f"规则{i+1}: {target_label} / {algo} / {action_label}"
+            self.cb_test_rule.addItem(label, i)
+
     def _get_test_crypto(self):
         from core.crypto_service import JSEngine, JSRPCEngine
         gw = self.config.get_gateway(self.gw_name)
         crypto = gw.get("crypto", {})
         jsrpc_cfg = gw.get("jsrpc", {})
+
+        rule_idx = self.cb_test_rule.currentData()
+        if rule_idx != "global" and rule_idx is not None:
+            rules = gw.get("match_rules", [])
+            if 0 <= rule_idx < len(rules):
+                rule = rules[rule_idx]
+                algo = rule.get("algorithm", "") or rule.get("data_algorithm", "")
+                params = rule.get("algorithm_params", {}) or rule.get("data_params", {})
+                if algo:
+                    return "rule", JSEngine(), {"algorithm": algo, "params": params}
 
         if crypto.get("engine") == "jsrpc" and jsrpc_cfg.get("enable"):
             rpc = JSRPCEngine(
@@ -552,6 +521,10 @@ class GatewayTab(QWidget):
                 result = engine.call(
                     cfg.get("group", ""),
                     cfg.get("encrypt_func", "encrypt"), text)
+            elif mode == "rule":
+                result = engine.call(
+                    "encrypt", cfg.get("algorithm", "AES"),
+                    text, cfg.get("params", {}))
             else:
                 result = engine.call(
                     "encrypt", cfg.get("algorithm", "AES"),
@@ -574,6 +547,10 @@ class GatewayTab(QWidget):
                 result = engine.call(
                     cfg.get("group", ""),
                     cfg.get("decrypt_func", "decrypt"), text)
+            elif mode == "rule":
+                result = engine.call(
+                    "decrypt", cfg.get("algorithm", "AES"),
+                    text, cfg.get("params", {}))
             else:
                 result = engine.call(
                     "decrypt", cfg.get("algorithm", "AES"),

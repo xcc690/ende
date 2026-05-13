@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from gui.gateway_tab import GatewayTab
 from gui.log_panel import LogPanel
+from gui.memo_panel import MemoPanel
 from core.config_center import ConfigCenter
 from core.gateway_manager import GatewayManager
 
@@ -37,6 +38,9 @@ class MainWindow(QMainWindow):
 
         self.log_panel = LogPanel()
         self.tabs.addTab(self.log_panel, "日志")
+
+        self.memo_panel = MemoPanel()
+        self.tabs.addTab(self.memo_panel, "JSRPC备忘录")
 
         corner = QWidget()
         corner_layout = QHBoxLayout(corner)
@@ -118,7 +122,7 @@ class MainWindow(QMainWindow):
         tab.log_signal.connect(self.log_panel.append_log)
         tab.request_remove.connect(self._remove_gateway)
 
-        idx = self.tabs.count() - 1
+        idx = self.tabs.count() - 2
         self.tabs.insertTab(idx, tab, gw_name)
         self._gw_tabs[gw_name] = tab
         self.tabs.setCurrentIndex(idx)

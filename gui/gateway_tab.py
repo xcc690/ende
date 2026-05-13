@@ -483,8 +483,14 @@ class GatewayTab(QWidget):
         from gui.match_dialog import TARGET_MAP
         for i, rule in enumerate(rules):
             target_label = TARGET_MAP.get(rule.get("target", ""), rule.get("target", ""))
-            algo = rule.get("algorithm", "") or rule.get("data_algorithm", "")
-            action_label = "加密" if rule.get("action") == "encrypt" else "解密"
+            if rule.get("target") == "chain":
+                steps = rule.get("chain_steps", [])
+                algos = [s.get("algorithm", "") for s in steps if s.get("algorithm")]
+                algo = "→".join(algos) if algos else "链式"
+                action_label = f"{len(steps)}步"
+            else:
+                algo = rule.get("algorithm", "") or rule.get("data_algorithm", "")
+                action_label = "加密" if rule.get("action") == "encrypt" else "解密"
             label = f"规则{i+1}: {target_label} / {algo} / {action_label}"
             self.cb_test_rule.addItem(label, i)
 
@@ -499,6 +505,8 @@ class GatewayTab(QWidget):
             rules = gw.get("match_rules", [])
             if 0 <= rule_idx < len(rules):
                 rule = rules[rule_idx]
+                if rule.get("target") == "chain":
+                    return "chain", None, {"chain_steps": rule.get("chain_steps", []), "jsrpc": jsrpc_cfg}
                 algo = rule.get("algorithm", "") or rule.get("data_algorithm", "")
                 params = rule.get("algorithm_params", {}) or rule.get("data_params", {})
                 if algo:
@@ -517,7 +525,9 @@ class GatewayTab(QWidget):
             return
         try:
             mode, engine, cfg = self._get_test_crypto()
-            if mode == "jsrpc":
+            if mode == "chain":
+                result = self._run_test_chain(text, cfg)
+            elif mode == "jsrpc":
                 result = engine.call(
                     cfg.get("group", ""),
                     cfg.get("encrypt_func", "encrypt"), text)
@@ -543,7 +553,9 @@ class GatewayTab(QWidget):
             return
         try:
             mode, engine, cfg = self._get_test_crypto()
-            if mode == "jsrpc":
+            if mode == "chain":
+                result = self._run_test_chain(text, cfg)
+            elif mode == "jsrpc":
                 result = engine.call(
                     cfg.get("group", ""),
                     cfg.get("decrypt_func", "decrypt"), text)
@@ -562,6 +574,20 @@ class GatewayTab(QWidget):
             self.test_output.setPlainText("")
             self.test_status.setText(f"解密失败: {e}")
             self.test_status.setStyleSheet("color: #f38ba8;")
+
+    def _run_test_chain(self, text, cfg):
+        from core.chain_processor import process_chain
+        from core.crypto_service import GatewayCryptoService, JSRPCEngine
+        steps = cfg.get("chain_steps", [])
+        jsrpc_cfg = cfg.get("jsrpc", {})
+        gw = self.config.get_gateway(self.gw_name)
+        crypto_svc = GatewayCryptoService(gw)
+        if jsrpc_cfg.get("enable"):
+            crypto_svc._jsrpc = JSRPCEngine(
+                url=jsrpc_cfg.get("url", ""),
+                timeout=jsrpc_cfg.get("timeout", 5))
+        result = process_chain(text, steps, crypto_svc)
+        return result
 
     def _test_swap(self):
         i = self.test_input.toPlainText()

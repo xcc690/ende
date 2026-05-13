@@ -69,6 +69,10 @@ class CryptoAddon:
             algo_params = rule.get("algorithm_params", {})
             hash_cfg = rule.get("hash_config", {})
 
+            if target == "chain":
+                self._process_chain(flow, rule, phase)
+                continue
+
             if action == "encrypt":
                 if target == "query_param_all" and phase == "request":
                     self._encrypt_query_params(flow, None, prefix, suffix, algo, algo_params, hash_cfg)
@@ -316,6 +320,28 @@ class CryptoAddon:
                     print(f"[加解密网关] JSON字段 {json_path} 已{action}: {flow.request.url}")
         except Exception as e:
             print(f"[加解密网关] JSON字段处理失败: {e}")
+
+    def _process_chain(self, flow, rule, phase):
+        try:
+            from core.chain_processor import process_chain
+            steps = rule.get("chain_steps", [])
+            if not steps:
+                return
+            if phase == "request":
+                body = flow.request.content.decode("utf-8", errors="replace") if flow.request.content else ""
+            else:
+                body = flow.response.content.decode("utf-8", errors="replace") if flow.response and flow.response.content else ""
+            if not body:
+                return
+            result = process_chain(body, steps, self._crypto)
+            if result and result != body:
+                if phase == "request":
+                    flow.request.content = result.encode("utf-8")
+                else:
+                    flow.response.content = result.encode("utf-8")
+                print(f"[加解密网关] 链式处理完成({len(steps)}步): {flow.request.url}")
+        except Exception as e:
+            print(f"[加解密网关] 链式处理失败: {e}")
 
 
 addons = [CryptoAddon()]

@@ -73,4 +73,10 @@ def find_matching_rules(rules: list, flow_data: dict) -> list:
                         matched.append(rule)
                 except (json.JSONDecodeError, TypeError):
                     pass
+        elif target == "chain":
+            req_body = flow_data.get("request_body", "")
+            resp_body = flow_data.get("response_body", "")
+            text = req_body + resp_body
+            if match_rule(rule, text):
+                matched.append(rule)
     return matched

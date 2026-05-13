@@ -17,6 +17,7 @@ TARGETS = [
     ("query_param_all", "GET参数(全部)"),
     ("query_param", "GET参数(指定)"),
     ("response_json_field", "响应JSON字段"),
+    ("chain", "链式处理"),
 ]
 MATCH_MODES = [
     ("all", "全部匹配"),
@@ -236,6 +237,19 @@ class MatchRulesDialog(QDialog):
         layout.addLayout(add_form)
         layout.addWidget(self.hash_group)
 
+        self.chain_group = QGroupBox("链式处理配置")
+        chain_layout = QVBoxLayout(self.chain_group)
+        self._chain_steps = []
+        chain_row = QHBoxLayout()
+        self.lbl_chain_summary = QLabel("未配置步骤")
+        self.lbl_chain_summary.setStyleSheet("color: #a6adc8;")
+        btn_chain_config = QPushButton("配置处理链")
+        btn_chain_config.clicked.connect(self._open_chain_dialog)
+        chain_row.addWidget(self.lbl_chain_summary, 1)
+        chain_row.addWidget(btn_chain_config)
+        chain_layout.addLayout(chain_row)
+        layout.addWidget(self.chain_group)
+
         self.json_group = QGroupBox("JSON 字段链式加解密配置")
         jf = QFormLayout(self.json_group)
         jf.setSpacing(6)
@@ -340,6 +354,7 @@ class MatchRulesDialog(QDialog):
         is_param = target == "query_param"
         is_query_all = target == "query_param_all"
         is_json = target == "response_json_field"
+        is_chain = target == "chain"
 
         self.input_header_name.setVisible(is_header)
         self.lbl_header_name.setVisible(is_header)
@@ -347,8 +362,9 @@ class MatchRulesDialog(QDialog):
         self.lbl_param_name.setVisible(is_param)
 
         self.json_group.setVisible(is_json)
+        self.chain_group.setVisible(is_chain)
 
-        show_normal = not is_json
+        show_normal = not is_json and not is_chain
         self.cb_match_mode.setVisible(show_normal and not is_query_all)
         self.lbl_match_mode.setVisible(show_normal and not is_query_all)
         self.cb_wrapper.setVisible(show_normal)
@@ -361,7 +377,16 @@ class MatchRulesDialog(QDialog):
         self.rule_params_widget.setVisible(show_normal)
         self.hash_group.setVisible(show_normal)
 
-        if is_json:
+        if is_chain:
+            self.cb_match_mode.setVisible(True)
+            self.lbl_match_mode.setVisible(True)
+            self.input_keyword.setVisible(True)
+            self.lbl_keyword.setVisible(True)
+            self.input_wrapper_prefix.setVisible(False)
+            self.lbl_wrapper_prefix.setVisible(False)
+            self.input_wrapper_suffix.setVisible(False)
+            self.lbl_wrapper_suffix.setVisible(False)
+        elif is_json:
             self.input_keyword.setVisible(False)
             self.lbl_keyword.setVisible(False)
             self.input_wrapper_prefix.setVisible(False)
@@ -396,6 +421,19 @@ class MatchRulesDialog(QDialog):
         if dlg.exec_() == QDialog.Accepted:
             self._rule_params = dlg.get_params()
             self._update_params_summary(self.lbl_rule_params_summary, self._rule_params)
+
+    def _open_chain_dialog(self):
+        from gui.chain_dialog import ChainStepsDialog
+        dlg = ChainStepsDialog(self._chain_steps, self)
+        if dlg.exec_() == QDialog.Accepted:
+            self._chain_steps = dlg.get_steps()
+            n = len(self._chain_steps)
+            if n:
+                self.lbl_chain_summary.setText(f"已配置 {n} 个步骤")
+                self.lbl_chain_summary.setStyleSheet("color: #a6e3a1;")
+            else:
+                self.lbl_chain_summary.setText("未配置步骤")
+                self.lbl_chain_summary.setStyleSheet("color: #a6adc8;")
 
     def _on_hash_enable_changed(self):
         enabled = self.cb_hash_enable.currentData() == "on"
@@ -481,6 +519,9 @@ class MatchRulesDialog(QDialog):
         if target == "response_json_field":
             return self._add_json_field_rule()
 
+        if target == "chain":
+            return self._add_chain_rule()
+
         match_mode = self.cb_match_mode.currentData()
         keyword = self.input_keyword.text().strip()
         header_name = self.input_header_name.text().strip()
@@ -551,6 +592,33 @@ class MatchRulesDialog(QDialog):
         self._update_params_summary(self.lbl_data_params_summary, {})
         self._update_params_summary(self.lbl_key_params_summary, {})
 
+    def _add_chain_rule(self):
+        if not self._chain_steps:
+            return
+        match_mode = self.cb_match_mode.currentData()
+        keyword = self.input_keyword.text().strip()
+        if match_mode != "all" and not keyword:
+            return
+        rule = {
+            "target": "chain",
+            "header_name": "",
+            "param_name": "",
+            "match_mode": match_mode,
+            "keyword": keyword,
+            "action": "chain",
+            "wrapper_prefix": "",
+            "wrapper_suffix": "",
+            "algorithm": "",
+            "algorithm_params": {},
+            "hash_config": {},
+            "chain_steps": list(self._chain_steps),
+        }
+        self._append_table_row(rule)
+        self.input_keyword.clear()
+        self._chain_steps = []
+        self.lbl_chain_summary.setText("未配置步骤")
+        self.lbl_chain_summary.setStyleSheet("color: #a6adc8;")
+
     def _append_table_row(self, rule: dict):
         row = self.rule_table.rowCount()
         self.rule_table.insertRow(row)
@@ -577,6 +645,13 @@ class MatchRulesDialog(QDialog):
                 "key_algorithm": rule.get("key_algorithm", ""),
                 "key_params": rule.get("key_params", {}),
             }, ensure_ascii=False))
+        elif rule["target"] == "chain":
+            steps = rule.get("chain_steps", [])
+            disp_kw = f"{len(steps)}步"
+            kw_item = QTableWidgetItem(disp_kw)
+            kw_item.setData(Qt.UserRole, json.dumps({
+                "chain_steps": steps,
+            }, ensure_ascii=False))
         else:
             kw_item = QTableWidgetItem(rule.get("keyword", ""))
         self.rule_table.setItem(row, 4, kw_item)
@@ -590,6 +665,10 @@ class MatchRulesDialog(QDialog):
         hash_config = rule.get("hash_config", {})
         if rule["target"] == "response_json_field":
             algo_disp = rule.get("data_algorithm", "")
+        elif rule["target"] == "chain":
+            steps = rule.get("chain_steps", [])
+            algos = [s.get("algorithm", "") for s in steps if s.get("algorithm")]
+            algo_disp = "→".join(algos) if algos else "链式"
         else:
             algo_disp = algo
             if hash_config.get("enabled"):
@@ -650,6 +729,11 @@ class MatchRulesDialog(QDialog):
                 if extra_data:
                     extra = json.loads(extra_data)
                     rule.update(extra)
+            elif target == "chain":
+                extra_data = self.rule_table.item(row, 4).data(Qt.UserRole)
+                if extra_data:
+                    extra = json.loads(extra_data)
+                    rule["chain_steps"] = extra.get("chain_steps", [])
 
             rules.append(rule)
         return rules

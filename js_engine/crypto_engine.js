@@ -286,7 +286,8 @@ function convertKeyToHex(keyStr, encoding) {
 
 function sm2_encrypt(plaintext, params) {
     var publicKey = convertKeyToHex(params.public_key, params.key_encoding);
-    var cipherMode = parseInt(params.cipher_mode) || 1;
+    var cipherMode = parseInt(params.cipher_mode);
+    if (isNaN(cipherMode)) cipherMode = 1;
     var encrypted = sm.sm2.doEncrypt(plaintext, publicKey, cipherMode);
     if (params.prefix_04 === 'true' || params.prefix_04 === true) {
         encrypted = '04' + encrypted;
@@ -296,7 +297,8 @@ function sm2_encrypt(plaintext, params) {
 
 function sm2_decrypt(ciphertext, params) {
     var privateKey = convertKeyToHex(params.private_key, params.key_encoding);
-    var cipherMode = parseInt(params.cipher_mode) || 1;
+    var cipherMode = parseInt(params.cipher_mode);
+    if (isNaN(cipherMode)) cipherMode = 1;
     if (params.prefix_04 === 'true' || params.prefix_04 === true) {
         if (ciphertext.startsWith('04')) {
             ciphertext = ciphertext.substring(2);
@@ -443,6 +445,16 @@ function base64_decode(data) {
     return CryptoJS.enc.Utf8.stringify(CryptoJS.enc.Base64.parse(data));
 }
 
+// ==================== Hex ====================
+
+function hex_encode(data) {
+    return Buffer.from(data, 'utf-8').toString('hex');
+}
+
+function hex_decode(data) {
+    return Buffer.from(data, 'hex').toString('utf-8');
+}
+
 // ==================== 统一调度 ====================
 
 function dispatch(action, algorithm, data, paramsJson) {
@@ -458,6 +470,7 @@ function dispatch(action, algorithm, data, paramsJson) {
             case 'sm2': return sm2_encrypt(data, params);
             case 'sm4': return sm4_encrypt(data, params);
             case 'base64': return base64_encode(data);
+            case 'hex': return hex_encode(data);
             case 'hash': return hash_digest(data, params);
             case 'hmac': return hmac_digest(data, params);
             case 'sm3': return sm3_hash(data, params);
@@ -473,6 +486,7 @@ function dispatch(action, algorithm, data, paramsJson) {
             case 'sm2': return sm2_decrypt(data, params);
             case 'sm4': return sm4_decrypt(data, params);
             case 'base64': return base64_decode(data);
+            case 'hex': return hex_decode(data);
             case 'hash': return hash_digest(data, params);
             case 'hmac': return hmac_digest(data, params);
             case 'sm3': return sm3_hash(data, params);

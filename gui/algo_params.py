@@ -1,6 +1,6 @@
 """算法参数定义 - 供 gateway_tab 和 match_dialog 共用"""
 
-ALGORITHMS = ["AES", "DES", "3DES", "RC4", "RSA", "SM2", "SM3", "SM4", "Hash", "HMAC", "Base64"]
+ALGORITHMS = ["AES", "DES", "3DES", "RC4", "RSA", "SM2", "SM3", "SM4", "Hash", "HMAC", "Base64", "Hex"]
 
 ALGO_PARAMS = {
     "AES": [
